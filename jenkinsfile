@@ -16,7 +16,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    url: ''
+                    url: 'https://github.com/gastonbarbaccia/sonarqube_aws_tf.git'
             }
         }
         stage('Terraform Init & Validate') {
