@@ -1,0 +1,62 @@
+pipeline {
+    agent any
+    parameters {
+        string(name: 'AWS_ACCESS_KEY_ID', defaultValue: '', description: 'AWS Access Key')
+        password(name: 'AWS_SECRET_ACCESS_KEY', defaultValue: '', description: 'AWS Secret Key')
+        string(name: 'AWS_REGION', defaultValue: 'us-east-1', description: 'AWS Region')
+        string(name: 'INSTANCE_NAME', defaultValue: 'sonarqube', description: 'EC2 Name')
+        string(name: 'INSTANCE_TYPE', defaultValue: 't2.medium', description: 'EC2 Instance type')
+    }
+    environment {
+        AWS_ACCESS_KEY_ID     = "${params.AWS_ACCESS_KEY_ID}"
+        AWS_SECRET_ACCESS_KEY = "${params.AWS_SECRET_ACCESS_KEY}"
+        AWS_REGION            = "${params.AWS_REGION}"
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: ''
+            }
+        }
+        stage('Terraform Init & Validate') {
+            steps {
+                sh 'terraform init'
+                sh 'terraform version'
+                sh 'terraform fmt -check'
+                sh 'terraform validate'
+            }
+        }
+        stage('Terraform Apply') {
+            steps {
+                sh """
+                    terraform apply -auto-approve \
+                        -var aws_region=${AWS_REGION} \
+                        -var instance_name=${params.INSTANCE_NAME} \
+                        -var instance_type=${params.INSTANCE_TYPE}
+                """
+            }
+        }
+        stage('Obtener Outputs') {
+            steps {
+                script {
+                    // Capturar IP pública y ruta de la llave privada
+                    env.INSTANCE_IP = sh(script: 'terraform output -raw instance_ip', returnStdout: true).trim()
+                    env.PEM_PATH    = sh(script: 'terraform output -raw private_key_path', returnStdout: true).trim()
+                }
+                echo "La IP de la instancia es: ${env.INSTANCE_IP}"
+                echo "La llave privada está en: ${env.PEM_PATH}"
+                sh 'ls'
+                sh 'sleep 60' // Esperar 60 segundos para asegurar que la instancia esté lista
+            }
+        }
+        stage('Instalación de Sonarqube') {
+            steps {
+                sh """
+                    ssh -o StrictHostKeyChecking=no -i ${env.PEM_PATH} ubuntu@${env.INSTANCE_IP} \
+                    'sudo apt-get update -y && sudo apt-get upgrade -y && sudo apt-get install -y docker.io && cd /home/ubuntu && sudo docker run -d --name sonarqube -p 9000:9000 -p 9092:9092 sonarqube'
+                """
+            }
+        }
+    }
+}
