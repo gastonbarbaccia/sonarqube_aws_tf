@@ -37,21 +37,23 @@ pipeline {
                 """
             }
         }
+        stage('Obtener Outputs') {
+            steps {
+                script {
+                    // Capturar IP pública y ruta de la llave privada
+                    env.INSTANCE_IP = sh(script: 'terraform output -raw instance_ip', returnStdout: true).trim()
+                    env.PEM_PATH    = sh(script: 'terraform output -raw private_key_path', returnStdout: true).trim()
+                }
+                echo "La IP de la instancia es: ${env.INSTANCE_IP}"
+                echo "La llave privada está en: ${env.PEM_PATH}"
+            }
+        }
         stage('Instalación de Sonarqube') {
             steps {
                 sh """
                     ssh -o StrictHostKeyChecking=no -i ${env.PEM_PATH} ubuntu@${env.INSTANCE_IP} \
                     'sudo apt-get update -y && sudo apt-get upgrade -y && sudo apt-get install -y docker.io && cd /home/ubuntu && sudo docker run -d --name sonarqube -p 9000:9000 -p 9092:9092 sonarqube'
                 """
-            }
-        }
-        stage('Obtener Outputs') {
-            steps {
-                script {
-                    // Capturar IP pública y ruta de la llave privada
-                    env.INSTANCE_IP = sh(script: 'terraform output -raw instance_ip', returnStdout: true).trim()
-                }
-                echo "La IP de la instancia es: htts://${env.INSTANCE_IP}:9000"
             }
         }
     }
